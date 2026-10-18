@@ -4,7 +4,7 @@
 #include <NTL/mat_GF2.h>
 #include <chrono>
 #include <iomanip>
-
+#include "find_d_monitored.hpp"
 using matrix = NTL::mat_GF2;
 
 matrix cyclic_shift(long n);
@@ -18,8 +18,8 @@ matrix concatenate_horizontal(const matrix& a, const matrix& b);
 matrix kernel_gf2(const matrix& h);
 
 //int find_d(const matrix& basis1, const matrix& basis2);
-long find_d(const matrix& logical_basis,
-            const matrix& stabilizer_basis);
+//long find_d(const matrix& logical_basis,
+//            const matrix& stabilizer_basis);
 int main()
 {
     try {
@@ -160,6 +160,7 @@ int main()
     }
     return d;
 }*/
+/*
 long find_d(const matrix& logical_basis,
             const matrix& stabilizer_basis)
 {
@@ -203,29 +204,34 @@ long find_d(const matrix& logical_basis,
                   << "    " << std::flush;
     };
 
-    NTL::vec_GF2 logical;
-    logical.SetLength(logical_basis.NumCols()); // Initially zero
+    //NTL::vec_GF2 logical;
+    //logical.SetLength(logical_basis.NumCols());  // Initially zero
 
+#pragma omp parallel for reduction(min:d) schedule(dynamic, 1)
     for (std::uint64_t i = 1; i < total1; ++i) {
-        logical += logical_basis[std::countr_zero(i)];
+        // Construct this logical combination independently.
+        const std::uint64_t mask = i ^ (i >> 1);
 
-        NTL::vec_GF2 candidate = logical;
+        NTL::vec_GF2 candidate;
+        candidate.SetLength(logical_basis.NumCols());
 
+        for (long bit = 0; bit < k; ++bit) {
+            if ((mask >> bit) & 1)
+                candidate += logical_basis[bit];
+        }
+
+        // Zero stabilizer combination.
         d = std::min(d, NTL::weight(candidate));
-        show_progress(i,0);
+
         for (std::uint64_t j = 1; j < total2; ++j) {
             candidate += stabilizer_basis[std::countr_zero(j)];
             d = std::min(d, NTL::weight(candidate));
-            if (j % 65536  == 0)
-            {
-                show_progress(i, j);
-            }
-
         }
     }
 
     return d;
 }
+*/
 
 matrix input_matrix(long l, long m)
 {

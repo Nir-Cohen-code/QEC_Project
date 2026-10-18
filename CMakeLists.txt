@@ -11,7 +11,11 @@ find_library(NTL_LIBRARY NAMES ntl REQUIRED)
 find_library(GMP_LIBRARY NAMES gmp REQUIRED)
 find_package(Threads REQUIRED)
 
-add_executable(QEC main.cpp)
+add_executable(QEC main.cpp
+        find_d_monitored.hpp)
+find_package(OpenMP REQUIRED COMPONENTS CXX)
+target_link_libraries(QEC PRIVATE OpenMP::OpenMP_CXX)
+
 target_include_directories(QEC PRIVATE "${NTL_INCLUDE_DIR}")
 target_link_libraries(QEC PRIVATE
         "${NTL_LIBRARY}" "${GMP_LIBRARY}" Threads::Threads)
