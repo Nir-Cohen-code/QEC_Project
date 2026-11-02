@@ -11,7 +11,7 @@
 #include <limits>
 #include <stdexcept>
 #include <thread>
-
+#include <omp.h>
 
 inline long find_d(const NTL::mat_GF2& logical_basis,
                    const NTL::mat_GF2& stabilizer_basis,
@@ -50,7 +50,6 @@ inline long find_d(const NTL::mat_GF2& logical_basis,
             std::chrono::steady_clock::now() - start).count();
         const long double percent = 100.0L * done / total;
 
-        // New lines render reliably in the CLion Run console.
         std::cerr << std::fixed << std::setprecision(2)
                   << "Progress: " << percent << "%"
                   << " | checked: " << done << '/' << total
@@ -79,43 +78,79 @@ inline long find_d(const NTL::mat_GF2& logical_basis,
 
     #pragma omp parallel for reduction(min:d) schedule(dynamic, 1)
     for (std::uint64_t i = 1; i < total1; ++i) {
+        // Construct the logical combination independently.
         const std::uint64_t mask = i ^ (i >> 1);
         NTL::vec_GF2 candidate;
         candidate.SetLength(logical_basis.NumCols());
-        for (long bit = 0; bit < k; ++bit)
-            if ((mask >> bit) & 1)
+
+        for (long bit = 0; bit < k; ++bit) {
+            if ((mask >> bit) & 1) {
                 candidate += logical_basis[bit];
+            }
+        }
 
         long weight = NTL::weight(candidate);
         if (weight < d) {
             d = weight;
             publish_best(weight);
         }
-        // Include the zero stabilizer combination in the progress count.
-        std::uint64_t pending = 1;
 
-        for (std::uint64_t j = 1; j < total2; ++j) {
+        std::uint64_t pending = 1;
+        std::uint64_t j = 1;
+
+        // UNROLLED GRAY CODE: 87.5% of dynamic branch lookups eliminated.
+        // The Gray code transition sequence for 8 steps is always exactly: 0, 1, 0, 2, 0, 1, 0, dyn
+        for (; j + 7 < total2; j += 8) {
+            candidate += stabilizer_basis[0];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[1];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[0];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[2];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[0];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[1];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[0];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            candidate += stabilizer_basis[std::countr_zero(j + 7)];
+            weight = NTL::weight(candidate); if (weight < d) { d = weight; publish_best(weight); }
+
+            if ((pending += 8) >= 4096) {
+                completed.fetch_add(pending, std::memory_order_relaxed);
+                pending = 0;
+            }
+        }
+
+        // Tail loop to finish any remaining elements (guaranteed to be 0 to 7 iterations)
+        for (; j < total2; ++j) {
             candidate += stabilizer_basis[std::countr_zero(j)];
             weight = NTL::weight(candidate);
             if (weight < d) {
                 d = weight;
                 publish_best(weight);
             }
-
-            // Batch counter updates to avoid an atomic operation per vector.
-            if (++pending == 4096) {
-                completed.fetch_add(pending, std::memory_order_relaxed);
-                pending = 0;
-            }
+            ++pending;
         }
-        if (pending != 0)
+
+        if (pending != 0) {
             completed.fetch_add(pending, std::memory_order_relaxed);
+        }
     }
 
     if (show_progress) {
         monitor.request_stop();
         monitor.join();
-        report(); // Final count is exactly total, so progress is 100%.
+        report();
     }
     return d;
 }
