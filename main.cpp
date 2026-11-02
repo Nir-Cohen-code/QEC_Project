@@ -4,7 +4,7 @@
 #include <NTL/mat_GF2.h>
 #include <chrono>
 #include <iomanip>
-#include "find_d_monitored.hpp"
+#include "find_d_fast.hpp"
 using matrix = NTL::mat_GF2;
 
 matrix cyclic_shift(long n);
@@ -23,8 +23,8 @@ matrix kernel_gf2(const matrix& h);
 int main()
 {
     try {
-        long l = 6;
-        long m = 6;
+        long l = 15;
+        long m = 3;
         matrix a, b;
 
         /*
@@ -41,13 +41,13 @@ int main()
         b = input_matrix(l, m);
         */
 
-        a =  NTL::power(generate_x(l, m), 3)
+        a =  NTL::power(generate_x(l, m), 9)
           + NTL::power(generate_y(l, m), 1)
           + NTL::power(generate_y(l, m), 2);
 
-        b = NTL::power(generate_x(l, m), 1)
-          + NTL::power(generate_x(l, m), 2)
-          + NTL::power(generate_y(l, m), 3);
+        b = NTL::power(generate_x(l, m), 2)
+          + NTL::power(generate_x(l, m), 7)
+          + NTL::power(generate_y(l, m), 0);
 
         const long n = 2 * l * m;
 
